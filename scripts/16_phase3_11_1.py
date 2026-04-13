@@ -5,24 +5,23 @@ import logging
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import statsmodels.formula.api as smf
+import statsmodels.formula.api as smf  # type: ignore[import-untyped]
 from matplotlib import font_manager
 
 
 # =========================
 # 固定：活動期（YYYYMMDDの閉区間）
 # =========================
-PERIODS: List[Tuple[str, int, int]] = [
+PERIODS: list[tuple[str, int, int]] = [
     ("1.維新期",                   18680101, 18700731),
     ("2.ドイツ滞在期①",            18700801, 18751005),
     ("3.殖産興業官僚期",            18751006, 18860331),
-    ("4.ドイツ滞在期②",            18860401, 18870605),
-    ("5.帰朝～宮中顧問官期",        18870606, 18890512),
+    ("4.ドイツ滞在期②",            18860401, 18870228),
+    ("5.帰朝～宮中顧問官期",        18870301, 18890512),
     ("6.宮内省御料局長期",          18890513, 18910531),
     ("7.内務大臣期",                18910601, 18920311),
     ("8.晩年期",                    18920312, 19000226),
@@ -33,7 +32,7 @@ PERIOD_ORDER = [p[0] for p in PERIODS]
 # =========================
 # 固定：属性ラベル
 # =========================
-DEFAULT_ATTR_MAP: Dict[str, str] = {
+DEFAULT_ATTR_MAP: dict[str, str] = {
     "①": "毛利家関係者",
     "②": "旧長州藩士・農兵隊",
     "③": "政治家・官員（農商務省関係者）",
@@ -81,7 +80,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--year_greg", default="年代_西暦")
     p.add_argument("--year_start", default="年代_開始")
     p.add_argument("--year_end", default="年代_終了")
-    p.add_argument("--rep_candidates", nargs="*", default=["年代_代表", "年代_代表値"])
+    p.add_argument("--rep_candidates", nargs="*", default=["年代_代表", "年代_代表値", "年代_代表値_西暦"])
     p.add_argument("--month", default="月")
     p.add_argument("--day", default="日")
     p.add_argument("--period_col", default="活動期")
@@ -183,7 +182,7 @@ def _num_series(df: pd.DataFrame, col: str) -> pd.Series:
     return pd.Series([np.nan] * len(df), index=df.index)
 
 
-def parse_attr_map_text(text: str) -> Dict[str, str]:
+def parse_attr_map_text(text: str) -> dict[str, str]:
     lines = []
     for ln in text.splitlines():
         ln = ln.strip()
@@ -197,7 +196,7 @@ def parse_attr_map_text(text: str) -> Dict[str, str]:
     blob = blob.replace(",", "、").replace("，", "、").replace(";", "、").replace("；", "、")
     parts = [p.strip() for p in blob.split("、") if p.strip()]
 
-    mapping: Dict[str, str] = {}
+    mapping: dict[str, str] = {}
     for p in parts:
         m = re.match(r"^(ND|O)\s*[:：]?\s*(.+)$", p)
         if m:
@@ -224,13 +223,13 @@ def normalize_attr_code(x) -> str:
     return s2
 
 
-def short_label(attr_code, attr_map: Dict[str, str]) -> str:
+def short_label(attr_code, attr_map: dict[str, str]) -> str:
     code = normalize_attr_code(attr_code)
     name = attr_map.get(code, "")
     return f"{code} {name}" if name else code
 
 
-def compress_series(s: pd.Series, topk: Optional[int] = None, min_count: Optional[int] = None, other_label: str = "その他") -> pd.Series:
+def compress_series(s: pd.Series, topk: int | None = None, min_count: int | None = None, other_label: str = "その他") -> pd.Series:
     vc = s.value_counts(dropna=True)
     if topk is not None:
         keep = vc.head(topk).index
@@ -239,7 +238,7 @@ def compress_series(s: pd.Series, topk: Optional[int] = None, min_count: Optiona
     return s.where(s.isin(keep), other_label)
 
 
-def explode_attributes(df: pd.DataFrame, attr_cols: List[str]) -> pd.DataFrame:
+def explode_attributes(df: pd.DataFrame, attr_cols: list[str]) -> pd.DataFrame:
     tmp = df.copy()
     for c in attr_cols:
         tmp[c] = tmp[c].astype(str).str.strip()
@@ -256,7 +255,7 @@ def explode_attributes(df: pd.DataFrame, attr_cols: List[str]) -> pd.DataFrame:
     return long
 
 
-def choose_font(preferred: Optional[str] = None) -> str:
+def choose_font(preferred: str | None = None) -> str:
     installed = {f.name for f in font_manager.fontManager.ttflist}
     candidates = [preferred] if preferred else []
     candidates.extend(FONT_CANDIDATES)
@@ -292,7 +291,7 @@ def build_effective_ymd_and_period(
     year_col_greg: str,
     year_start_col: str,
     year_end_col: str,
-    rep_col: Optional[str],
+    rep_col: str | None,
     month_col: str,
     day_col: str,
     period_col: str,
@@ -508,8 +507,8 @@ def main() -> None:
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     used_font = choose_font(args.font)
 
-    log_lines: List[str] = []
-    outputs_created: List[Path] = []
+    log_lines: list[str] = []
+    outputs_created: list[Path] = []
 
     def remember(path: Path):
         outputs_created.append(path)
@@ -746,7 +745,7 @@ def main() -> None:
     else:
         ref_region = args.ref_region
 
-    safe_map: Dict[str, str] = {}
+    safe_map: dict[str, str] = {}
     used_safe = set()
     for a in attr_cats_raw:
         base_name = safe_attr_name(a)
@@ -829,7 +828,7 @@ def main() -> None:
     inter_rows = []
     scipy_ok = False
     try:
-        from scipy.stats import chi2  # type: ignore
+        from scipy.stats import chi2
         scipy_ok = True
     except Exception:
         log("⚠️ scipy が無いので交互作用LRはスキップ（pip install scipy で有効化）")
