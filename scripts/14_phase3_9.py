@@ -18,8 +18,8 @@ PERIODS: List[Tuple[str, int, int]] = [
     ("1.維新期", 18680101, 18700731),
     ("2.ドイツ滞在期①", 18700801, 18751005),
     ("3.殖産興業官僚期", 18751006, 18860331),
-    ("4.ドイツ滞在期②", 18860401, 18870605),
-    ("5.帰朝～宮中顧問官期", 18870606, 18890512),
+    ("4.ドイツ滞在期②", 18860401, 18870228),
+    ("5.帰朝～宮中顧問官期", 18870301, 18890512),
     ("6.宮内省御料局長期", 18890513, 18910531),
     ("7.内務大臣期", 18910601, 18920311),
     ("8.晩年期", 18920312, 19000226),
@@ -321,7 +321,7 @@ def assign_period(
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Phase3-9: 出生地域×活動期の可視化（年代幅対応）")
 
-    p.add_argument("--input", default="shinagawa_letters_cleaned.csv", help="Input CSV path")
+    p.add_argument("--input", default="outputs/cleaning/shinagawa_letters_cleaned.csv", help="Input CSV path")
     p.add_argument("--encoding", default="utf-8-sig", help="Input CSV encoding")
     p.add_argument("--outdir", default="outputs/phase3_9", help="Output directory")
     p.add_argument("--timestamp", default=None, help="Timestamp string for filenames (default: now)")

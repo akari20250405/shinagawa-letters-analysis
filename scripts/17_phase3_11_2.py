@@ -1,17 +1,16 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
 import re
-from typing import Dict, Iterable, List, Optional, Tuple
-
 import numpy as np
 import pandas as pd
-import statsmodels.api as sm
-import statsmodels.formula.api as smf
-from statsmodels.stats.sandwich_covariance import cov_cluster
-from scipy.stats import norm  # type: ignore
+import statsmodels.api as sm  # type: ignore[import-untyped]
+import statsmodels.formula.api as smf  # type: ignore[import-untyped]
+from statsmodels.stats.sandwich_covariance import cov_cluster  # type: ignore[import-untyped]
+from scipy.stats import norm
 
 
 # =========================
@@ -36,8 +35,8 @@ PERIODS = [
     ("1.維新期", pd.Timestamp("1868-01-01"), pd.Timestamp("1870-07-31")),
     ("2.ドイツ滞在期①", pd.Timestamp("1870-08-01"), pd.Timestamp("1875-10-05")),
     ("3.殖産興業官僚期", pd.Timestamp("1875-10-06"), pd.Timestamp("1886-03-31")),
-    ("4.ドイツ滞在期②", pd.Timestamp("1886-04-01"), pd.Timestamp("1887-06-05")),
-    ("5.帰朝～宮中顧問官期", pd.Timestamp("1887-06-06"), pd.Timestamp("1889-05-12")),
+    ("4.ドイツ滞在期②", pd.Timestamp("1886-04-01"), pd.Timestamp("1887-02-28")),
+    ("5.帰朝～宮中顧問官期", pd.Timestamp("1887-03-01"), pd.Timestamp("1889-05-12")),
     ("6.宮内省御料局長期", pd.Timestamp("1889-05-13"), pd.Timestamp("1891-05-31")),
     ("7.内務大臣期", pd.Timestamp("1891-06-01"), pd.Timestamp("1892-03-11")),
     ("8.晩年期", pd.Timestamp("1892-03-12"), pd.Timestamp("1900-02-26")),
@@ -94,7 +93,7 @@ def normalize_text(x: object) -> str:
     return s
 
 
-def load_attr_map(path: Optional[str]) -> Dict[str, str]:
+def load_attr_map(path: str | None) -> dict[str, str]:
     out = DEFAULT_ATTR_MAP.copy()
     if not path:
         return out
@@ -120,13 +119,13 @@ def load_attr_map(path: Optional[str]) -> Dict[str, str]:
     return out
 
 
-def short_label(code: object, attr_map: Dict[str, str]) -> str:
+def short_label(code: object, attr_map: dict[str, str]) -> str:
     c = normalize_text(code)
     return attr_map.get(c, c)
 
 
-def safe_name_map(attr_codes: Iterable[str]) -> Dict[str, str]:
-    mapping: Dict[str, str] = {}
+def safe_name_map(attr_codes: Iterable[str]) -> dict[str, str]:
+    mapping: dict[str, str] = {}
     used = set()
     for i, a in enumerate(attr_codes, start=1):
         a_norm = normalize_text(a)
@@ -148,7 +147,11 @@ def safe_name_map(attr_codes: Iterable[str]) -> Dict[str, str]:
     return mapping
 
 
-def split_attr_tokens(s: object) -> List[str]:
+def sorted_unique(values) -> list:
+    return sorted(set(values))
+
+
+def split_attr_tokens(s: object) -> list[str]:
     txt = normalize_text(s)
     if not txt:
         return []
@@ -167,9 +170,9 @@ def explode_attributes(df: pd.DataFrame) -> pd.DataFrame:
     if not attr_candidates:
         raise ValueError("属性列が見つかりません。")
 
-    rows: List[dict] = []
+    rows: list[dict] = []
     for _, row in df.iterrows():
-        codes: List[str] = []
+        codes: list[str] = []
         for c in attr_candidates:
             vals = split_attr_tokens(row.get(c))
             codes.extend(vals)
@@ -224,14 +227,14 @@ def is_valid_month_day(m: object, d: object | None = None, y: object | None = No
         return False
 
 
-def pid_for_ymd(dt: pd.Timestamp) -> Optional[str]:
+def pid_for_ymd(dt: pd.Timestamp) -> str | None:
     for pid, start, end in PERIODS:
         if start <= dt <= end:
             return pid
     return None
 
 
-def range_single_period(start_y: int, end_y: int) -> Optional[str]:
+def range_single_period(start_y: int, end_y: int) -> str | None:
     hit = []
     for pid, start, end in PERIODS:
         ys, ye = start.year, end.year
@@ -315,7 +318,7 @@ def build_effective_period(df: pd.DataFrame) -> pd.Series:
     return out
 
 
-def prune_levels_for_y(df: pd.DataFrame, ycol: str, catcol: str, min_n: int = 30) -> Tuple[pd.DataFrame, List[str]]:
+def prune_levels_for_y(df: pd.DataFrame, ycol: str, catcol: str, min_n: int = 30) -> tuple[pd.DataFrame, list[str]]:
     g = df.groupby(catcol, observed=False)[ycol].agg(["count", "sum"])
     keep = g[(g["count"] >= min_n) & (g["sum"] > 0) & (g["sum"] < g["count"])].index.tolist()
     out = df[df[catcol].isin(keep)].copy()
@@ -381,7 +384,7 @@ def main() -> None:
     ensure_outdir(out_dir)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    log_lines: List[str] = []
+    log_lines: list[str] = []
 
     def log(s: str = "") -> None:
         log_lines.append(s)
@@ -454,7 +457,7 @@ def main() -> None:
     base = df2[[args.letter_id_col, args.period_col, "出生地域_分析", args.sender]].copy()
     attrs_per_letter = (
         dfA.groupby(args.letter_id_col, observed=False)["属性_分析"]
-        .apply(lambda x: sorted(set(x)))
+        .apply(sorted_unique)
         .rename("attrs")
     )
     base = base.merge(attrs_per_letter, on=args.letter_id_col, how="left")
@@ -479,14 +482,14 @@ def main() -> None:
 
     for a in target_attrs:
         ycol = f"Y_{safe_map[a]}"
-        b[ycol] = b["attrs"].apply(lambda lst: 1 if a in lst else 0)
+        b[ycol] = b["attrs"].apply(lambda attrs, _a=a: 1 if _a in attrs else 0)
 
     pos_info = [(a, int(b[f"Y_{safe_map[a]}"].sum())) for a in target_attrs]
     log(f"🎯 ロジット対象属性: {pos_info}")
     log("")
 
     rescue_notes = []
-    results: List[dict] = []
+    results: list[dict] = []
 
     for a in target_attrs:
         ycol = f"Y_{safe_map[a]}"

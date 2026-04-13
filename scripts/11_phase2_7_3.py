@@ -12,14 +12,15 @@ from matplotlib import font_manager
 MONTH_CANDIDATES = ["月", "月_数値", "month", "月日_月", "月_num"]
 DAY_CANDIDATES = ["日", "日_数値", "day", "月日_日", "日_num"]
 FONT_CANDIDATES = ["MS Gothic", "Yu Gothic", "Meiryo", "IPAexGothic"]
+YEAR_REP_CANDIDATES = ["年代_代表", "年代_代表値", "年代_代表値_西暦"]
 
 # 活動期定義
 PERIODS = [
     (1, "維新期", "1868-1870年 (明治元年-3年7月)", 18680101, 18700731),
     (2, "ドイツ滞在期①", "1870-1875年 (明治3年8月-8年10月5日)", 18700801, 18751005),
     (3, "殖産興業官僚期", "1875-1886年 (明治8年10月6日-19年3月)", 18751006, 18860331),
-    (4, "ドイツ滞在期②", "1886-1887年 (明治19年4月-20年6月5日)", 18860401, 18870605),
-    (5, "帰朝～宮中顧問官期", "1887-1889年 (明治20年6月6日-22年5月12日)", 18870606, 18890512),
+    (4, "ドイツ滞在期②", "1886-1887年 (明治19年4月-20年2月28日)", 18860401, 18870228),
+    (5, "帰朝～宮中顧問官期", "1887-1889年 (明治20年3月1日-22年5月12日)", 18870301, 18890512),
     (6, "宮内省御料局長期", "1889-1891年 (明治22年5月13日-24年5月末)", 18890513, 18910531),
     (7, "内務大臣期", "1891-1892年 (明治24年6月-25年3月11日)", 18910601, 18920311),
     (8, "晩年期", "1892-1900年 (明治25年3月12日-33年2月26日)", 18920312, 19000226),
@@ -134,8 +135,12 @@ def main() -> None:
     df = pd.read_csv(in_path, encoding=args.encoding)
 
     # 1) 年・月・日を安全に作る
+    col_rep = next((c for c in YEAR_REP_CANDIDATES if c in df.columns), None)
     year_raw = pd.to_numeric(df.get(args.col_year, np.nan), errors="coerce")
-    df["_year"] = np.floor(year_raw + 0.5).astype("Int64")
+    rep_raw = pd.to_numeric(df.get(col_rep, np.nan), errors="coerce") if col_rep else pd.Series(np.nan, index=df.index)
+
+    year_for_point = year_raw.where(year_raw.notna(), rep_raw)
+    df["_year"] = np.floor(year_for_point + 0.5).astype("Int64")
 
     col_month = next((c for c in MONTH_CANDIDATES if c in df.columns), None)
     col_day = next((c for c in DAY_CANDIDATES if c in df.columns), None)

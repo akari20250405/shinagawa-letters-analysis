@@ -1,17 +1,17 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
 import re
-from typing import Dict, Iterable, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
-import statsmodels.api as sm
-import statsmodels.formula.api as smf
-from scipy.stats import norm  # type: ignore
-from statsmodels.stats.sandwich_covariance import cov_cluster
+import statsmodels.api as sm  # type: ignore[import-untyped]
+import statsmodels.formula.api as smf  # type: ignore[import-untyped]
+from scipy.stats import norm
+from statsmodels.stats.sandwich_covariance import cov_cluster  # type: ignore[import-untyped]
 
 
 DEFAULT_INPUT = "outputs/cleaning/shinagawa_letters_cleaned.csv"
@@ -26,8 +26,8 @@ PERIODS = [
     ("1.維新期", pd.Timestamp("1868-01-01"), pd.Timestamp("1870-07-31")),
     ("2.ドイツ滞在期①", pd.Timestamp("1870-08-01"), pd.Timestamp("1875-10-05")),
     ("3.殖産興業官僚期", pd.Timestamp("1875-10-06"), pd.Timestamp("1886-03-31")),
-    ("4.ドイツ滞在期②", pd.Timestamp("1886-04-01"), pd.Timestamp("1887-06-05")),
-    ("5.帰朝～宮中顧問官期", pd.Timestamp("1887-06-06"), pd.Timestamp("1889-05-12")),
+    ("4.ドイツ滞在期②", pd.Timestamp("1886-04-01"), pd.Timestamp("1887-02-28")),
+    ("5.帰朝～宮中顧問官期", pd.Timestamp("1887-03-01"), pd.Timestamp("1889-05-12")),
     ("6.宮内省御料局長期", pd.Timestamp("1889-05-13"), pd.Timestamp("1891-05-31")),
     ("7.内務大臣期", pd.Timestamp("1891-06-01"), pd.Timestamp("1892-03-11")),
     ("8.晩年期", pd.Timestamp("1892-03-12"), pd.Timestamp("1900-02-26")),
@@ -91,7 +91,7 @@ def normalize_text(x: object) -> str:
     return s
 
 
-def load_attr_map(path: Optional[str]) -> Dict[str, str]:
+def load_attr_map(path: str | None) -> dict[str, str]:
     out = DEFAULT_ATTR_MAP.copy()
     if not path:
         return out
@@ -116,13 +116,13 @@ def load_attr_map(path: Optional[str]) -> Dict[str, str]:
     return out
 
 
-def short_label(code: object, attr_map: Dict[str, str]) -> str:
+def short_label(code: object, attr_map: dict[str, str]) -> str:
     c = normalize_text(code)
     return attr_map.get(c, c)
 
 
-def safe_name_map(attr_codes: Iterable[str]) -> Dict[str, str]:
-    mapping: Dict[str, str] = {}
+def safe_name_map(attr_codes: Iterable[str]) -> dict[str, str]:
+    mapping: dict[str, str] = {}
     used = set()
     for i, a in enumerate(attr_codes, start=1):
         a_norm = normalize_text(a)
@@ -144,7 +144,7 @@ def safe_name_map(attr_codes: Iterable[str]) -> Dict[str, str]:
     return mapping
 
 
-def split_attr_tokens(s: object) -> List[str]:
+def split_attr_tokens(s: object) -> list[str]:
     txt = normalize_text(s)
     if not txt:
         return []
@@ -162,9 +162,9 @@ def explode_attributes(df: pd.DataFrame) -> pd.DataFrame:
     if not attr_candidates:
         raise ValueError("属性列が見つかりません。")
 
-    rows: List[dict] = []
+    rows: list[dict] = []
     for _, row in df.iterrows():
-        codes: List[str] = []
+        codes: list[str] = []
         for c in attr_candidates:
             vals = split_attr_tokens(row.get(c))
             codes.extend(vals)
@@ -217,18 +217,18 @@ def is_valid_month_day(m: object, d: object | None = None, y: object | None = No
         return False
 
 
-def pid_for_ymd(dt: pd.Timestamp) -> Optional[str]:
+def pid_for_ymd(dt: pd.Timestamp) -> str | None:
     for pid, start, end in PERIODS:
         if start <= dt <= end:
             return pid
     return None
 
 
-def period_for_year_midpoint(y: int) -> Optional[str]:
+def period_for_year_midpoint(y: int) -> str | None:
     return pid_for_ymd(pd.Timestamp(int(y), 7, 1))
 
 
-def range_single_period(start_y: int, end_y: int) -> Optional[str]:
+def range_single_period(start_y: int, end_y: int) -> str | None:
     hit = []
     for pid, start, end in PERIODS:
         ys, ye = start.year, end.year
@@ -239,7 +239,7 @@ def range_single_period(start_y: int, end_y: int) -> Optional[str]:
     return None
 
 
-def build_effective_period_sensitivity(df: pd.DataFrame) -> Tuple[pd.Series, pd.Series]:
+def build_effective_period_sensitivity(df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
     """
     Sensitivity仕様:
     - 年代幅が単一期に収まるならその期
@@ -306,7 +306,7 @@ def build_effective_period_sensitivity(df: pd.DataFrame) -> Tuple[pd.Series, pd.
     return out, rule
 
 
-def prune_levels_for_y(df: pd.DataFrame, ycol: str, catcol: str, min_n: int = 30) -> Tuple[pd.DataFrame, List[str], pd.DataFrame]:
+def prune_levels_for_y(df: pd.DataFrame, ycol: str, catcol: str, min_n: int = 30) -> tuple[pd.DataFrame, list[str], pd.DataFrame]:
     g = df.groupby(catcol, observed=False)[ycol].agg(["count", "sum"]).reset_index()
     g["drop_reason"] = ""
     g.loc[g["count"] < min_n, "drop_reason"] = g["drop_reason"].mask(g["drop_reason"] == "", "count<min_n")
@@ -317,7 +317,7 @@ def prune_levels_for_y(df: pd.DataFrame, ycol: str, catcol: str, min_n: int = 30
     return out, keep, g
 
 
-def prune_cells_for_y(df: pd.DataFrame, ycol: str, rowcat: str, colcat: str, min_n: int = 20) -> Tuple[pd.DataFrame, pd.DataFrame]:
+def prune_cells_for_y(df: pd.DataFrame, ycol: str, rowcat: str, colcat: str, min_n: int = 20) -> tuple[pd.DataFrame, pd.DataFrame]:
     g = df.groupby([rowcat, colcat], observed=False)[ycol].agg(["count", "sum"]).reset_index()
     g["drop_reason"] = ""
     g.loc[g["count"] < min_n, "drop_reason"] = g["drop_reason"].mask(g["drop_reason"] == "", "count<min_cell_n")
@@ -402,15 +402,15 @@ def main() -> None:
     safe_csv = out_dir / f"phase3_11_3_attr_safe_name_map_{ts}.csv"
     pd.DataFrame(safe_rows).to_csv(safe_csv, index=False, encoding="utf-8-sig")
 
-    run_index_rows: List[dict] = []
-    all_outputs: List[Path] = [safe_csv]
+    run_index_rows: list[dict] = []
+    all_outputs: list[Path] = [safe_csv]
 
     for run_cfg in DEFAULT_RUNS:
         run_name = run_cfg["run"]
         run_dir = out_dir / run_name
         ensure_outdir(run_dir)
 
-        log_lines: List[str] = []
+        log_lines: list[str] = []
 
         def log(s: str = "") -> None:
             log_lines.append(s)
@@ -478,7 +478,7 @@ def main() -> None:
         log("")
 
         rescue_notes = []
-        results: List[dict] = []
+        results: list[dict] = []
 
         for a in target_attrs:
             ycol = f"Y_{safe_map[a]}"
