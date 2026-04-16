@@ -4,6 +4,6 @@ authors:
   - family-names: Ikeda
     given-names: Sanae
     orcid: "https://orcid.org/0009-0005-9627-0324"
-title: "Meiji Letter Lexicon"
-version: "v1.0.2"
+title: "shinagawa-letters-analysis"
+version: "v1.1.0"
 date-released: 2026-04-16
