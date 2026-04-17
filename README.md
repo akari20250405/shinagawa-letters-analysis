@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # やじてんデータ分析
 
 品川弥二郎受信書簡データの前処理・基礎集計・可視化・推定モデル構築を段階的に実行するためのスクリプト群です。  
@@ -43,10 +44,7 @@ yajiten/
 │  ├─ 12_phase2_8_1.py
 │  ├─ 13_phase2_8_2.py
 │  ├─ 14_phase3_9.py
-│  ├─ 15_phase3_10.py
-│  ├─ 16_phase3_11_1.py
-│  ├─ 17_phase3_11_2.py
-│  └─ 18_phase3_11_3.py
+│  └─ 15_phase3_10.py
 ├─ data/
 │  └─ <raw_input_file>   # 元データ（非公開、各自で配置）
 ├─ outputs/
@@ -68,10 +66,7 @@ yajiten/
 │  ├─ phase2_8_1/
 │  ├─ phase2_8_2/
 │  ├─ phase3_9/
-│  ├─ phase3_10/
-│  ├─ phase3_11_1/
-│  ├─ phase3_11_2/
-│  └─ phase3_11_3/
+│  └─ phase3_10/
 └─ README.md
 ```
 
@@ -356,73 +351,6 @@ python scripts/15_phase3_10.py --input outputs/cleaning/shinagawa_letters_cleane
 
 ---
 
-#### 16_phase3_11_1.py
-属性 × 活動期 × 出生地域に関する集計・MCA・ロジスティック回帰結果を出力します。
-
-```powershell
-python scripts/16_phase3_11_1.py --input outputs/cleaning/shinagawa_letters_cleaned.csv
-```
-
-実行後、`outputs/phase3_11_1/` に以下のファイルが生成されます。
-
-- 属性別棒グラフ
-- 属性 × 活動期クロス集計表CSV
-- 構成比表CSV
-- 標準化残差表CSV
-- MCAカテゴリ座標CSV
-- ロジスティック回帰結果CSV
-- 属性safe名対応表CSV
-- ログファイル
-
----
-
-#### 17_phase3_11_2.py
-対象属性に絞ったロジスティック回帰結果を出力します。
-
-```powershell
-python scripts/17_phase3_11_2.py --input outputs/cleaning/shinagawa_letters_cleaned.csv
-```
-
-実行後、`outputs/phase3_11_2/` に以下のファイルが生成されます。
-
-- 対象属性ロジット結果CSV
-- 属性safe名対応表CSV
-- ログファイル
-
-補足:
-- 属性⑨は主モデルで分離・収束不良が生じやすいため、必要に応じて period のみの rescue model を許可します。
-- 詳細はログファイルに記録されます。
-
----
-
-#### 18_phase3_11_3.py
-感度分析 RUNS を回し、対象属性ロジット結果を run ごとに出力します。
-
-```powershell
-python scripts/18_phase3_11_3.py --input outputs/cleaning/shinagawa_letters_cleaned.csv
-```
-
-実行後、`outputs/phase3_11_3/` に以下のファイルが生成されます。
-
-- run別ロジット結果CSV
-- run別ログファイル
-- run_index CSV
-- 属性safe名対応表CSV
-
-主な run は以下の通りです。
-
-- `A_main_withRegion`
-- `B_main_noRegion`
-- `C_wideAttr_withRegion`
-- `D_strictMin20_withRegion`
-
-補足:
-- 本スクリプトでは感度分析仕様として、月日欠損時に年ベース midpoint 判定を許容しています。
-- 属性⑨は主モデルで分離・収束不良が生じやすいため、感度分析でも period のみの rescue model を許可します。
-- 詳細は各 run のログファイルに記録されます。
-
----
-
 ## 注意事項
 
 - 入力列名は、各スクリプトで想定している列名と一致している必要があります。
@@ -453,7 +381,7 @@ This dataset is licensed under a Creative Commons Attribution 4.0 International 
 
 ## 引用/Citation
 このデータセットを使用する場合は、以下のように引用してください。
-池田さなえ(2026) 「品川弥二郎受信書簡メタデータの統計的分析」(Version v1.0.1). Zenodo. https://doi.org/10.5281/zenodo.19362503
+池田さなえ(2026) 「品川弥二郎受信書簡メタデータの統計的分析」(Version v1.0.1). Zenodo. https://doi.org/10.5281/zenodo.19362502
 
 If you use this dataset, please cite it as below:
-Sanae IKEDA. (2026).  shinagawa-letters-analysis(Version v1.0.1). Zenodo. https://doi.org/10.5281/zenodo.19362503
+Sanae IKEDA. (2026).  shinagawa-letters-analysis(Version v1.0.1). Zenodo. https://doi.org/10.5281/zenodo.19362502
