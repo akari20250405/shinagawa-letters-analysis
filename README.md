@@ -326,11 +326,11 @@ python scripts/14_phase3_9.py --input outputs/cleaning/shinagawa_letters_cleaned
 
 実行後、`outputs/phase3_9/` に以下のファイルが生成されます。
 
-- raw クロス集計表CSV
-- 年正規化表CSV
-- 構成比表CSV
-- 標準化残差表CSV
-- Top送信者シェア表CSV
+- raw クロス集計グラフ・CSV
+- 年正規化グラフ・CSV
+- 構成比グラフ・CSV
+- 標準化残差図・CSV
+- Top送信者シェア・表CSV
 - ヒートマップ図
 - ログファイル
 
@@ -345,7 +345,7 @@ python scripts/15_phase3_10.py --input outputs/cleaning/shinagawa_letters_cleane
 
 実行後、`outputs/phase3_10/` に以下のファイルが生成されます。
 
-- 居住地 entropy サマリCSV
+- 居住地 entropy・サマリCSV
 - Top居住地一覧CSV
 - 東京集中度図
 - entropy関連図
@@ -363,10 +363,10 @@ python scripts/16_phase3_11_1.py --input outputs/cleaning/shinagawa_letters_clea
 実行後、`outputs/phase3_11_1/` に以下のファイルが生成されます。
 
 - 属性別棒グラフ
-- 属性 × 活動期クロス集計表CSV
-- 構成比表CSV
-- 標準化残差表CSV
-- MCAカテゴリ座標CSV
+- 属性 × 活動期クロス集計図・CSV
+- 構成比グラフ・CSV
+- 標準化残差表・CSV
+- MCAカテゴリ座標・CSV
 - ログファイル
 
 ---
