@@ -1,9 +1,9 @@
-cff-version: 1.2.0
-message: "Updated version with refined repository structure and removed redundant components."
+cff-version: 1.3.0
+message: "Updated version with refined repository structure and README.md."
 authors:
 - family-names: IKEDA
   given-names: Sanae
   orcid: https://orcid.org/0009-0005-9627-0324
 title: shinagawa-letters-analysis
-version: 1.2.0
+version: 1.3.0
 date-released: 2026-04-17
