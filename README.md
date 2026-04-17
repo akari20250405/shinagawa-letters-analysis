@@ -44,7 +44,8 @@ yajiten/
 │  ├─ 12_phase2_8_1.py
 │  ├─ 13_phase2_8_2.py
 │  ├─ 14_phase3_9.py
-│  └─ 15_phase3_10.py
+│  ├─ 15_phase3_10.py
+│  └─ 16_phase3_11_1.py
 ├─ data/
 │  └─ <raw_input_file>   # 元データ（非公開、各自で配置）
 ├─ outputs/
@@ -66,7 +67,8 @@ yajiten/
 │  ├─ phase2_8_1/
 │  ├─ phase2_8_2/
 │  ├─ phase3_9/
-│  └─ phase3_10/
+│  ├─ phase3_10/
+│  └─ phase3_11_1/
 └─ README.md
 ```
 
@@ -347,6 +349,24 @@ python scripts/15_phase3_10.py --input outputs/cleaning/shinagawa_letters_cleane
 - Top居住地一覧CSV
 - 東京集中度図
 - entropy関連図
+- ログファイル
+
+---
+
+#### 16_phase3_11_1.py
+属性 × 活動期 × 出生地域に関する集計・MCA結果を出力します。
+
+```powershell
+python scripts/16_phase3_11_1.py --input outputs/cleaning/shinagawa_letters_cleaned.csv
+```
+
+実行後、`outputs/phase3_11_1/` に以下のファイルが生成されます。
+
+- 属性別棒グラフ
+- 属性 × 活動期クロス集計表CSV
+- 構成比表CSV
+- 標準化残差表CSV
+- MCAカテゴリ座標CSV
 - ログファイル
 
 ---
