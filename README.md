@@ -19,7 +19,6 @@
 - pandas
 - numpy
 - matplotlib
-- statsmodels
 - scipy
 - openpyxl
 
