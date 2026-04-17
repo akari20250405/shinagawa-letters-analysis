@@ -1,9 +1,9 @@
-cff-version: 1.1.0
-message: "If you use this dataset, please cite it as below."
+cff-version: 1.2.0
+message: "Updated version with refined repository structure and removed redundant components."
 authors:
-  - family-names: Ikeda
-    given-names: Sanae
-    orcid: "https://orcid.org/0009-0005-9627-0324"
-title: "shinagawa-letters-analysis"
-version: "v1.1.0"
-date-released: 2026-04-16
+- family-names: IKEDA
+  given-names: Sanae
+  orcid: https://orcid.org/0009-0005-9627-0324
+title:shinagawa-letters-analysis
+version: v1.2.0
+date-released: 2026-04-17
