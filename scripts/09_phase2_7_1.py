@@ -27,6 +27,14 @@ PERIODS = [
 VALID_PIDS = [pid for pid, *_ in PERIODS]
 CHOICES = VALID_PIDS
 
+# 元号年を西暦へ変換するためのオフセット。
+# Phase2-7-2 と同じ定義を使い、年代幅を一律に明治年として扱わない。
+ERA_OFFSET = {
+    "M": 1867,  # 明治1年 = 1868年
+    "K": 1864,  # 慶応1年 = 1865年
+    "S": 1925,  # 昭和1年 = 1926年
+}
+
 FONT_CANDIDATES = [
     "MS Gothic",
     "Yu Gothic",
@@ -166,6 +174,7 @@ def main():
     col_year_point = "年代_西暦"
     col_year_start = "年代_開始"
     col_year_end = "年代_終了"
+    col_era = "年代_時代"
     rep_candidates = ["年代_代表", "年代_代表値", "年代_代表値_西暦"]
     month_candidates = ["月", "月_数値", "month", "月日_月", "月_num"]
     day_candidates = ["日", "日_数値", "day", "月日_日", "日_num"]
@@ -181,15 +190,28 @@ def main():
     else:
         df["_year_rep_raw"] = np.nan
 
-    df["_year_start_meiji"] = pd.to_numeric(df.get(col_year_start), errors="coerce")
-    df["_year_end_meiji"] = pd.to_numeric(df.get(col_year_end), errors="coerce")
+    df["_year_start_raw"] = pd.to_numeric(df.get(col_year_start), errors="coerce")
+    df["_year_end_raw"] = pd.to_numeric(df.get(col_year_end), errors="coerce")
+    if col_era in df.columns:
+        era_offset = df[col_era].map(ERA_OFFSET)
+    else:
+        era_offset = pd.Series(pd.NA, index=df.index, dtype="Float64")
+
+    # 「年代_代表値_西暦」だけはすでに西暦。それ以外の代表年は元号別に変換する。
+    if col_rep == "年代_代表値_西暦":
+        year_rep_greg = df["_year_rep_raw"]
+        rep_mode = "rep_as_gregorian"
+    else:
+        year_rep_greg = df["_year_rep_raw"] + era_offset
+        rep_mode = "rep_plus_era_offset"
+
     df["_month"] = pd.to_numeric(df.get(col_month), errors="coerce") if col_month else np.nan
     df["_day"] = pd.to_numeric(df.get(col_day), errors="coerce") if col_day else np.nan
 
     # =========================
     # 1) 点データによる period 判定
     # =========================
-    year_for_point = df["_year_point_raw"].where(df["_year_point_raw"].notna(), df["_year_rep_raw"])
+    year_for_point = df["_year_point_raw"].where(df["_year_point_raw"].notna(), year_rep_greg)
 
     y_ser = round_half_up_to_int(year_for_point)
     m_ser = round_half_up_to_int(df["_month"])
@@ -241,10 +263,10 @@ def main():
     # =========================
     # 2) 年代幅（開始/終了）対応
     # =========================
-    is_range = df["_year_start_meiji"].notna() & df["_year_end_meiji"].notna()
+    is_range = df["_year_start_raw"].notna() & df["_year_end_raw"].notna()
 
-    start_year_g = round_half_up_to_int(df["_year_start_meiji"] + 1867)
-    end_year_g = round_half_up_to_int(df["_year_end_meiji"] + 1867)
+    start_year_g = round_half_up_to_int(df["_year_start_raw"] + era_offset)
+    end_year_g = round_half_up_to_int(df["_year_end_raw"] + era_offset)
 
     start_ymd_range = (start_year_g * 10000 + 101).astype("Int64")
     end_ymd_range = (end_year_g * 10000 + 1231).astype("Int64")
@@ -271,14 +293,16 @@ def main():
     # =========================
     classifiable_mask = df["活動期_id"].isin(VALID_PIDS)
     n_classifiable = int(classifiable_mask.sum())
+    n_unclassified = n_total - n_classifiable
 
-    has_any_year = df["_year_point_raw"].notna() | is_range | df["_year_rep_raw"].notna()
+    has_any_year = df["_year_point_raw"].notna() | is_range | year_rep_greg.notna()
     n_valid_year = int(has_any_year.sum())
     valid_rate = (n_valid_year / n_total * 100) if n_total else 0.0
 
     n_year_missing = int((~has_any_year).sum())
     n_boundary_hold = int((df["活動期_id"] == "境界年（月欠損）").sum())
     n_day_hold = int((df["活動期_id"] == "境界月（日欠損）").sum())
+    n_outside_or_other = n_unclassified - n_year_missing - n_boundary_hold - n_day_hold
 
     n_range_total = int(is_range.sum())
     n_range_contained = int(range_contained.sum())
@@ -308,23 +332,27 @@ def main():
     )
     log.append(
         f"年代幅対応: '{col_year_start}', '{col_year_end}'"
+        + f", 元号='{col_era}'"
         + (f", 代表='{col_rep}'" if col_rep else "（代表年カラムなし）")
     )
+    log.append(f"代表年の扱い: {rep_mode}")
     log.append("代表年列は補助的に使用し、西暦列（年代_西暦）を優先して点判定する。")
     log.append("")
     log.append("=== 品川活動期間別受信書簡数 ===")
     log.append(f"活動期間分類可能データ: {n_classifiable}件")
-    log.append(f"活動期間分類不可データ: {n_year_missing}件（年代情報なし）")
+    log.append(f"活動期間分類不可データ: {n_unclassified}件")
+    log.append(f"  - 年代情報なし: {n_year_missing}件")
+    if n_boundary_hold:
+        log.append(f"  - 境界年（月欠損）で保留: {n_boundary_hold}件")
+    if n_day_hold:
+        log.append(f"  - 境界月（日欠損）で保留: {n_day_hold}件")
+    if n_outside_or_other:
+        log.append(f"  - 活動期間外・境界またぎ等: {n_outside_or_other}件")
 
     if n_range_total:
         log.append(f"年代幅データ: {n_range_total}件")
         log.append(f"  - 単一活動期に収まるため採用: {n_range_contained}件")
         log.append(f"  - 境界またぎ等のため点判定（代表年）に委任: {n_range_boundary}件")
-
-    if n_day_hold:
-        log.append(f"（注意）境界月（日欠損）のため分類保留: {n_day_hold}件")
-    if n_boundary_hold:
-        log.append(f"（注意）境界年（月欠損）のため分類保留: {n_boundary_hold}件")
 
     for pid, pname, pdesc, *_ in PERIODS:
         log.append(f"{pid}.{pname}: {counts[pid]}件 ({pct[pid]:.1f}%) - {pdesc}")
