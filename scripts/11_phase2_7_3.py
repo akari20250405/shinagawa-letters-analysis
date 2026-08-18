@@ -13,6 +13,7 @@ MONTH_CANDIDATES = ["月", "月_数値", "month", "月日_月", "月_num"]
 DAY_CANDIDATES = ["日", "日_数値", "day", "月日_日", "日_num"]
 FONT_CANDIDATES = ["MS Gothic", "Yu Gothic", "Meiryo", "IPAexGothic"]
 YEAR_REP_CANDIDATES = ["年代_代表", "年代_代表値", "年代_代表値_西暦"]
+ERA_OFFSET = {"M": 1867, "K": 1864, "S": 1925}
 
 # 活動期定義
 PERIODS = [
@@ -33,6 +34,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--encoding", default="utf-8-sig", help="CSV encoding")
     p.add_argument("--outdir", default="outputs/phase2_7_3", help="Output directory")
     p.add_argument("--col_year", default="年代_西暦", help="Gregorian year column")
+    p.add_argument("--col_year_start", default="年代_開始", help="Range start year (era-year)")
+    p.add_argument("--col_year_end", default="年代_終了", help="Range end year (era-year)")
+    p.add_argument("--col_era", default="年代_時代", help="Era column (M/K/S)")
     return p.parse_args()
 
 
@@ -136,10 +140,40 @@ def main() -> None:
 
     # 1) 年・月・日を安全に作る
     col_rep = next((c for c in YEAR_REP_CANDIDATES if c in df.columns), None)
-    year_raw = pd.to_numeric(df.get(args.col_year, np.nan), errors="coerce")
+    year_raw = (
+        pd.to_numeric(df[args.col_year], errors="coerce")
+        if args.col_year in df.columns
+        else pd.Series(np.nan, index=df.index)
+    )
     rep_raw = pd.to_numeric(df.get(col_rep, np.nan), errors="coerce") if col_rep else pd.Series(np.nan, index=df.index)
 
-    year_for_point = year_raw.where(year_raw.notna(), rep_raw)
+    offset = (
+        df[args.col_era].map(ERA_OFFSET)
+        if args.col_era in df.columns
+        else pd.Series(pd.NA, index=df.index, dtype="Float64")
+    )
+    if col_rep == "年代_代表値_西暦":
+        rep_year_greg = rep_raw
+        rep_mode = "rep_as_gregorian"
+    else:
+        rep_year_greg = rep_raw + offset
+        rep_mode = "rep_plus_era_offset"
+
+    start_raw = (
+        pd.to_numeric(df[args.col_year_start], errors="coerce")
+        if args.col_year_start in df.columns
+        else pd.Series(np.nan, index=df.index)
+    )
+    end_raw = (
+        pd.to_numeric(df[args.col_year_end], errors="coerce")
+        if args.col_year_end in df.columns
+        else pd.Series(np.nan, index=df.index)
+    )
+    is_range = start_raw.notna() & end_raw.notna()
+    start_year_g = np.floor(pd.to_numeric(start_raw + offset, errors="coerce") + 0.5).astype("Int64")
+    end_year_g = np.floor(pd.to_numeric(end_raw + offset, errors="coerce") + 0.5).astype("Int64")
+
+    year_for_point = year_raw.where(year_raw.notna(), rep_year_greg)
     df["_year"] = np.floor(year_for_point + 0.5).astype("Int64")
 
     col_month = next((c for c in MONTH_CANDIDATES if c in df.columns), None)
@@ -238,6 +272,25 @@ def main() -> None:
         pid.loc[cond] = pid_i
         status.loc[cond] = "分類（年のみ）"
 
+    # 3-4) 年代幅が単一活動期に完全に収まる場合は、Phase2-7-2 と同様に上書きする
+    start_ymd_range = (start_year_g * 10000 + 101).astype("Int64")
+    end_ymd_range = (end_year_g * 10000 + 1231).astype("Int64")
+    conds_start = [start_ymd_range.between(s, e) for _, _, _, s, e in periods]
+    conds_end = [end_ymd_range.between(s, e) for _, _, _, s, e in periods]
+    start_pid = pd.Series(
+        np.select([c.fillna(False) for c in conds_start], valid_pids, default=pd.NA),
+        index=df.index,
+        dtype="object",
+    )
+    end_pid = pd.Series(
+        np.select([c.fillna(False) for c in conds_end], valid_pids, default=pd.NA),
+        index=df.index,
+        dtype="object",
+    )
+    range_contained = is_range & start_pid.notna() & (start_pid == end_pid) & start_pid.isin(valid_pids)
+    pid.loc[range_contained] = start_pid.loc[range_contained]
+    status.loc[range_contained] = "分類（年代幅が単一期内）"
+
     df["_period_id"] = pid
     df["_period_status"] = status
 
@@ -280,6 +333,13 @@ def main() -> None:
     lines.append(f"年代分析用有効データ（年あり）: {n_year_valid}件")
     lines.append(f"有効率: {valid_rate:.1f}%")
     lines.append(f"使用カラム: '{args.col_year}', month='{col_month}', day='{col_day}'")
+    lines.append(
+        f"年代幅: start='{args.col_year_start}', end='{args.col_year_end}', era='{args.col_era}', rep='{col_rep}'"
+    )
+    lines.append(f"代表年の扱い: {rep_mode}")
+    lines.append(
+        f"年代幅データ: {int(is_range.sum())}件（単一期に収まる: {int(range_contained.sum())}件）"
+    )
     lines.append(f"使用フォント: {font_name}")
     lines.append(f"日センシティブ月: {sorted(DAY_SENSITIVE_MONTHS)}")
     lines.append(f"境界年: {sorted(boundary_years)}")

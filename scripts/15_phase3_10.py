@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import calendar
 from datetime import datetime
 from pathlib import Path
 from typing import Iterable
@@ -28,7 +29,6 @@ PERIODS = [
 PERIOD_LABELS = [p[0] for p in PERIODS]
 PERIOD_STARTS = {p[0]: pd.Timestamp(p[1]) for p in PERIODS}
 PERIOD_ENDS = {p[0]: pd.Timestamp(p[2]) for p in PERIODS}
-DAY_SENSITIVE_MONTHS = {(ts.month, ts.year) for _, s, e in PERIODS for ts in [pd.Timestamp(s), pd.Timestamp(e)]}
 
 ERA_OFFSET = {"M": 1867, "K": 1864, "S": 1925}
 
@@ -57,22 +57,37 @@ def find_first_existing_col(df: pd.DataFrame, candidates: Iterable[str]) -> str 
     return None
 
 
-def build_year_rules(periods: list[tuple[str, str, str]]) -> dict[int, tuple[str | None, str | None, bool]]:
-    rules: dict[int, tuple[str | None, str | None, bool]] = {}
-    for i, (_, s, e) in enumerate(periods):
-        s_ts, e_ts = pd.Timestamp(s), pd.Timestamp(e)
-        for year in range(s_ts.year, e_ts.year + 1):
-            if year not in rules:
-                rules[year] = (None, None, False)
-            prev_start, prev_end, _ = rules[year]
-            start_label = PERIOD_LABELS[i] if year == s_ts.year else prev_start
-            end_label = PERIOD_LABELS[i] if year == e_ts.year else prev_end
-            full = (year > s_ts.year) and (year < e_ts.year)
-            rules[year] = (start_label, end_label, full)
-    return rules
+def label_for_date(ts: pd.Timestamp) -> str | None:
+    for label in PERIOD_LABELS:
+        if PERIOD_STARTS[label] <= ts <= PERIOD_ENDS[label]:
+            return label
+    return None
 
 
-YEAR_RULES = build_year_rules(PERIODS)
+def build_safe_year_labels(periods: list[tuple[str, str, str]]) -> dict[int, str]:
+    first_year = pd.Timestamp(periods[0][1]).year
+    last_year = pd.Timestamp(periods[-1][2]).year
+    labels: dict[int, str] = {}
+    for year in range(first_year, last_year + 1):
+        jan_label = label_for_date(pd.Timestamp(year=year, month=1, day=1))
+        dec_label = label_for_date(pd.Timestamp(year=year, month=12, day=31))
+        if jan_label is not None and jan_label == dec_label:
+            labels[year] = jan_label
+    return labels
+
+
+def build_day_sensitive_months(periods: list[tuple[str, str, str]]) -> set[tuple[int, int]]:
+    sensitive: set[tuple[int, int]] = set()
+    for _label, start, end in periods:
+        for ts, is_start in ((pd.Timestamp(start), True), (pd.Timestamp(end), False)):
+            last_day = calendar.monthrange(ts.year, ts.month)[1]
+            if (is_start and ts.day != 1) or ((not is_start) and ts.day != last_day):
+                sensitive.add((ts.month, ts.year))
+    return sensitive
+
+
+SAFE_YEAR_LABELS = build_safe_year_labels(PERIODS)
+DAY_SENSITIVE_MONTHS = build_day_sensitive_months(PERIODS)
 
 
 def round_half_up_to_int(x: pd.Series) -> pd.Series:
@@ -129,7 +144,12 @@ def assign_activity_period(df: pd.DataFrame) -> pd.DataFrame:
     year_direct = pd.to_numeric(out[year_col], errors="coerce") if year_col else pd.Series(np.nan, index=out.index)
     rep_raw = pd.to_numeric(out[rep_col], errors="coerce") if rep_col else pd.Series(np.nan, index=out.index)
     era_raw = out[era_col] if era_col else pd.Series(pd.NA, index=out.index, dtype="string")
-    rep_greg = to_gregorian_from_era(rep_raw, era_raw) if rep_col and era_col else pd.Series(np.nan, index=out.index)
+    if rep_col == "年代_代表値_西暦":
+        rep_greg = rep_raw
+    elif rep_col and era_col:
+        rep_greg = to_gregorian_from_era(rep_raw, era_raw)
+    else:
+        rep_greg = pd.Series(np.nan, index=out.index)
     point_year_source = year_direct.where(year_direct.notna(), rep_greg)
     y_ser = round_half_up_to_int(point_year_source)
 
@@ -142,14 +162,11 @@ def assign_activity_period(df: pd.DataFrame) -> pd.DataFrame:
         if day_col else pd.Series(pd.array([pd.NA] * len(out), dtype="Int64"), index=out.index)
     )
 
-    ys = (
-        pd.to_numeric(out[ys_col], errors="coerce").astype("Int64")
-        if ys_col else pd.Series(pd.array([pd.NA] * len(out), dtype="Int64"), index=out.index)
-    )
-    ye = (
-        pd.to_numeric(out[ye_col], errors="coerce").astype("Int64")
-        if ye_col else pd.Series(pd.array([pd.NA] * len(out), dtype="Int64"), index=out.index)
-    )
+    era_offset = era_raw.map(ERA_OFFSET) if era_col else pd.Series(pd.NA, index=out.index, dtype="Float64")
+    ys_raw = pd.to_numeric(out[ys_col], errors="coerce") if ys_col else pd.Series(np.nan, index=out.index)
+    ye_raw = pd.to_numeric(out[ye_col], errors="coerce") if ye_col else pd.Series(np.nan, index=out.index)
+    ys = round_half_up_to_int(ys_raw + era_offset)
+    ye = round_half_up_to_int(ye_raw + era_offset)
 
     out["活動期"] = pd.NA
     out["活動期_判定種別"] = pd.NA
@@ -183,27 +200,22 @@ def assign_activity_period(df: pd.DataFrame) -> pd.DataFrame:
     mask_y = y_ser.notna() & month_ser.isna() & out["活動期"].isna()
     for idx in out.index[mask_y]:
         y = int(y_ser.loc[idx])
-        if y not in YEAR_RULES:
-            continue
-        start_label, end_label, full = YEAR_RULES[y]
-        if full:
-            labels = [p for p in PERIOD_LABELS if PERIOD_STARTS[p].year < y < PERIOD_ENDS[p].year]
-            if labels:
-                out.at[idx, "活動期"] = labels[0]
-                out.at[idx, "活動期_判定種別"] = "y_full"
-        elif start_label == end_label and start_label is not None:
-            out.at[idx, "活動期"] = start_label
+        if y in SAFE_YEAR_LABELS:
+            out.at[idx, "活動期"] = SAFE_YEAR_LABELS[y]
             out.at[idx, "活動期_判定種別"] = "y_single_year"
-        else:
+        elif PERIOD_STARTS[PERIOD_LABELS[0]].year <= y <= PERIOD_ENDS[PERIOD_LABELS[-1]].year:
             out.at[idx, "活動期"] = "境界年（月欠損）"
             out.at[idx, "活動期_判定種別"] = "y_boundary"
+        else:
+            out.at[idx, "活動期_判定種別"] = "y_out_of_period"
 
     mask_range = ys.notna() & ye.notna()
     for idx in out.index[mask_range]:
         start_y, end_y = int(ys.loc[idx]), int(ye.loc[idx])
         containing = [
             p for p in PERIOD_LABELS
-            if PERIOD_STARTS[p].year <= start_y <= end_y <= PERIOD_ENDS[p].year
+            if PERIOD_STARTS[p] <= pd.Timestamp(year=start_y, month=1, day=1)
+            and pd.Timestamp(year=end_y, month=12, day=31) <= PERIOD_ENDS[p]
         ]
         if len(containing) == 1:
             out.at[idx, "活動期"] = containing[0]

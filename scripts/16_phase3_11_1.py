@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import calendar
 import logging
 import re
 from datetime import datetime
@@ -26,6 +27,7 @@ PERIODS: list[tuple[str, int, int]] = [
     ("8.晩年期",                    18920312, 19000226),
 ]
 PERIOD_ORDER = [p[0] for p in PERIODS]
+ERA_OFFSET = {"M": 1867, "K": 1864, "S": 1925}
 
 
 # =========================
@@ -79,6 +81,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--year_greg", default="年代_西暦")
     p.add_argument("--year_start", default="年代_開始")
     p.add_argument("--year_end", default="年代_終了")
+    p.add_argument("--era", default="年代_時代")
     p.add_argument("--rep_candidates", nargs="*", default=["年代_代表", "年代_代表値", "年代_代表値_西暦"])
     p.add_argument("--month", default="月")
     p.add_argument("--day", default="日")
@@ -110,10 +113,6 @@ def ensure_outdir(p: Path) -> None:
     p.mkdir(parents=True, exist_ok=True)
 
 
-def meiji_to_gregorian_year(meiji_year: int) -> int:
-    return 1867 + int(meiji_year)  # 明治元年=1868
-
-
 def _to_float_or_nan(x):
     try:
         return float(x)
@@ -121,18 +120,14 @@ def _to_float_or_nan(x):
         return np.nan
 
 
-def to_gregorian_year(x) -> float:
+def round_half_up_year(x) -> float:
     if pd.isna(x):
         return np.nan
     v = _to_float_or_nan(x)
     if np.isnan(v):
         return np.nan
     v_int = int(np.floor(v + 0.5))
-    if 1 <= v_int <= 99:
-        return float(meiji_to_gregorian_year(v_int))
-    if 1700 <= v_int <= 2100:
-        return float(v_int)
-    return np.nan
+    return float(v_int)
 
 
 def ymd_int(year, month, day):
@@ -167,6 +162,20 @@ def range_within_single_period(y_start_g, y_end_g):
         if p_start <= start_ymd and end_ymd <= p_end:
             return label
     return None
+
+
+def month_within_single_period(year, month):
+    if pd.isna(year) or pd.isna(month):
+        return None
+    y = int(year)
+    m = int(month)
+    try:
+        last_day = calendar.monthrange(y, m)[1]
+    except Exception:
+        return None
+    start_label = assign_period_from_ymd(ymd_int(y, m, 1))
+    end_label = assign_period_from_ymd(ymd_int(y, m, last_day))
+    return start_label if start_label is not None and start_label == end_label else None
 
 
 def _num_series(df: pd.DataFrame, col: str) -> pd.Series:
@@ -284,6 +293,7 @@ def build_effective_ymd_and_period(
     year_col_greg: str,
     year_start_col: str,
     year_end_col: str,
+    era_col: str,
     rep_col: str | None,
     month_col: str,
     day_col: str,
@@ -291,11 +301,19 @@ def build_effective_ymd_and_period(
 ) -> pd.DataFrame:
     out = df.copy()
 
-    out["_y_greg"] = _num_series(out, year_col_greg).apply(to_gregorian_year)
-    out["_ys_greg"] = _num_series(out, year_start_col).apply(to_gregorian_year)
-    out["_ye_greg"] = _num_series(out, year_end_col).apply(to_gregorian_year)
+    era_offset = (
+        out[era_col].map(ERA_OFFSET)
+        if era_col in out.columns
+        else pd.Series(pd.NA, index=out.index, dtype="Float64")
+    )
+    out["_y_greg"] = _num_series(out, year_col_greg).apply(round_half_up_year)
+    out["_ys_greg"] = (_num_series(out, year_start_col) + era_offset).apply(round_half_up_year)
+    out["_ye_greg"] = (_num_series(out, year_end_col) + era_offset).apply(round_half_up_year)
     if rep_col and rep_col in out.columns:
-        out["_yr_greg"] = _num_series(out, rep_col).apply(to_gregorian_year)
+        if rep_col == "年代_代表値_西暦":
+            out["_yr_greg"] = _num_series(out, rep_col).apply(round_half_up_year)
+        else:
+            out["_yr_greg"] = (_num_series(out, rep_col) + era_offset).apply(round_half_up_year)
     else:
         out["_yr_greg"] = np.nan
 
@@ -315,61 +333,37 @@ def build_effective_ymd_and_period(
         m = out.at[idx, "_m"]
         d = out.at[idx, "_d"]
 
-        has_range = pd.notna(ys) and pd.notna(ye) and int(ys) != int(ye)
+        has_range = pd.notna(ys) and pd.notna(ye)
 
-        if has_range:
-            p = range_within_single_period(ys, ye)
-            if p is not None:
-                out.at[idx, period_col] = p
-                out.at[idx, "_period_rule"] = "range_within"
-                continue
-
-            if pd.notna(yr):
-                rep_m = int(m) if pd.notna(m) else 7
-                rep_d = int(d) if pd.notna(d) else 1
-                ymd = ymd_int(int(yr), rep_m, rep_d)
-                out.at[idx, "_ymd_eff"] = ymd
-                out.at[idx, period_col] = assign_period_from_ymd(ymd)
-                out.at[idx, "_period_rule"] = "range_boundary_use_rep"
-                continue
-
-            out.at[idx, period_col] = None
-            out.at[idx, "_period_rule"] = "range_boundary_no_rep_drop"
-            continue
-
-        y0 = yg
-        if pd.isna(y0) and pd.notna(ys):
-            y0 = ys
-        if pd.isna(y0) and pd.notna(yr):
-            y0 = yr
+        y0 = yg if pd.notna(yg) else yr
 
         if pd.isna(y0):
             out.at[idx, period_col] = None
             out.at[idx, "_period_rule"] = "no_year_drop"
-            continue
-
-        if pd.notna(m) and pd.notna(d):
+        elif pd.notna(m) and pd.notna(d):
             ymd = ymd_int(int(y0), int(m), int(d))
             out.at[idx, "_ymd_eff"] = ymd
             out.at[idx, period_col] = assign_period_from_ymd(ymd)
             out.at[idx, "_period_rule"] = "single_year_with_md"
-            continue
-
-        p = range_within_single_period(y0, y0)
-        if p is not None:
+        elif pd.notna(m):
+            p = month_within_single_period(y0, m)
             out.at[idx, period_col] = p
-            out.at[idx, "_period_rule"] = "single_year_yearonly_within"
-            continue
+            out.at[idx, "_period_rule"] = "single_year_month_within" if p is not None else "boundary_month_day_missing"
+        else:
+            p = range_within_single_period(y0, y0)
+            out.at[idx, period_col] = p
+            out.at[idx, "_period_rule"] = "single_year_yearonly_within" if p is not None else "boundary_year_month_missing"
 
-        if pd.notna(yr):
-            ymd = ymd_int(int(yr), 7, 1)
-            out.at[idx, "_ymd_eff"] = ymd
-            out.at[idx, period_col] = assign_period_from_ymd(ymd)
-            out.at[idx, "_period_rule"] = "single_year_yearonly_use_rep"
-            continue
-
-        out.at[idx, period_col] = None
-        out.at[idx, "_period_rule"] = "single_year_yearonly_ambiguous_drop"
+        # Phase2-7-2 と同じく、年代幅が単一活動期に完全に収まる場合だけ上書きする。
+        if has_range:
+            p_range = range_within_single_period(ys, ye)
+            if p_range is not None:
+                out.at[idx, period_col] = p_range
+                out.at[idx, "_period_rule"] = "range_within"
+            elif pd.notna(out.at[idx, period_col]):
+                out.at[idx, "_period_rule"] = "range_boundary_use_point"
+            else:
+                out.at[idx, "_period_rule"] = "range_boundary_unclassified"
 
     return out
 
@@ -551,6 +545,7 @@ def main() -> None:
         year_col_greg=args.year_greg,
         year_start_col=args.year_start,
         year_end_col=args.year_end,
+        era_col=args.era,
         rep_col=rep_col,
         month_col=args.month,
         day_col=args.day,

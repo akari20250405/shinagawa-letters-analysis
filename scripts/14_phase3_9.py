@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import calendar
 import logging
 from datetime import datetime
 from pathlib import Path
@@ -255,8 +256,30 @@ def assign_period(
     mask_ym = df2["_year"].notna() & df2["_month"].notna()
     df2.loc[mask_ym, "_ym"] = (df2.loc[mask_ym, "_year"] * 100 + df2.loc[mask_ym, "_month"]).astype("Int64")
 
-    boundary_years = {1870, 1875, 1886, 1887, 1889, 1891, 1892, 1900}
-    day_sensitive_months = {187510, 188706, 188905, 189203, 190002}
+    # PERIODS から境界ルールを生成し、Phase2-7-2 と同じ判定にそろえる。
+    boundary_years: set[int] = set()
+    safe_year_labels: Dict[int, str] = {}
+    first_year = periods[0][1] // 10000
+    last_year = periods[-1][2] // 10000
+    for year in range(first_year, last_year + 1):
+        jan1 = year * 10000 + 101
+        dec31 = year * 10000 + 1231
+        jan_label = next((lab for lab, s, e in periods if s <= jan1 <= e), None)
+        dec_label = next((lab for lab, s, e in periods if s <= dec31 <= e), None)
+        if jan_label is not None and jan_label == dec_label:
+            safe_year_labels[year] = jan_label
+        else:
+            boundary_years.add(year)
+
+    day_sensitive_months: set[int] = set()
+    for _lab, start_ymd, end_ymd in periods:
+        for ymd_value, is_start in ((start_ymd, True), (end_ymd, False)):
+            year = ymd_value // 10000
+            month = (ymd_value // 100) % 100
+            day = ymd_value % 100
+            last_day = calendar.monthrange(year, month)[1]
+            if (is_start and day != 1) or ((not is_start) and day != last_day):
+                day_sensitive_months.add(year * 100 + month)
 
     period = pd.Series(pd.NA, index=df2.index, dtype="object")
 
@@ -279,14 +302,7 @@ def assign_period(
 
     mask_y_only = df2["_year"].notna() & df2["_month"].isna() & period.isna()
     mask_y_safe = mask_y_only & (~df2["_year"].isin(list(boundary_years)))
-
-    yy = df2["_year"]
-    sel_y = pd.Series(pd.NA, index=df2.index, dtype="object")
-    for lab, s, e in periods:
-        sy, ey = (s // 10000), (e // 10000)
-        inside = mask_y_safe & (yy > sy) & (yy < ey)
-        sel_y.loc[inside] = lab
-    period.loc[mask_y_safe] = sel_y.loc[mask_y_safe]
+    period.loc[mask_y_safe] = df2.loc[mask_y_safe, "_year"].map(safe_year_labels)
 
     df2["活動期"] = period
 
