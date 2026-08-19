@@ -400,7 +400,9 @@ This dataset is licensed under a Creative Commons Attribution 4.0 International 
 
 ## 引用/Citation
 池田さなえ (2026) 「品川弥二郎受信書簡メタデータの統計的分析」(Version v---). Zenodo. DOI
+
 ※引用時には利用したバージョンおよび当該バージョンのDOIを記載してください。
 
 If you use this dataset, please cite it as below:
+
 Sanae IKEDA. (2026).  shinagawa-letters-analysis(Version v---). Zenodo. DOI
