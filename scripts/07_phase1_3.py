@@ -12,7 +12,7 @@ DEFAULT_OUTDIR = "outputs/phase1_3"
 DEFAULT_ENCODING = "utf-8-sig"
 
 
-def parse_args() -> argparse.Namespace:
+def get_cli_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
         description="受信当初面識の有無=0（面識なし）の発信者一覧と該当レコードを出力する"
     )
@@ -120,13 +120,14 @@ def build_log_text(
 
 
 def main() -> None:
-    args = parse_args()
+    args = get_cli_args()
     csv_path = Path(args.input)
     outdir = Path(args.outdir)
     outdir.mkdir(parents=True, exist_ok=True)
 
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    ts_human = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now = datetime.now()
+    ts = now.strftime("%Y%m%d_%H%M%S")
+    ts_human = now.strftime("%Y-%m-%d %H:%M:%S")
     out_log = outdir / f"phase1_3_no_acquaintance_senders_log_{ts}.txt"
 
     df = pd.read_csv(csv_path, encoding=args.encoding)
