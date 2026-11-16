@@ -147,7 +147,7 @@ def main() -> None:
     df_no_disp = df_no[cols].copy() if cols else df_no.copy()
 
     senders = df_no[args.col_sender].dropna().astype(str).str.strip()
-    senders = senders[(senders != "") & (senders.str.lower() != "nan")]
+    senders = senders[(senders != "") & (senders.str.lower() != "nan") & (senders.str.lower() != "none")]
     sender_list = sorted(senders.unique())
 
     log_console, log_file = build_log_text(
